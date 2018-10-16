@@ -1,5 +1,6 @@
 #include <ntddk.h>
 #include <windef.h>
+#include <stdarg.h>
 
 /*
   Introduction to IPB designation:
@@ -17,10 +18,18 @@
   However, I haven't tested if this is true.
 */
 
+void __cdecl ZtxDebugPrint(IN PCSTR Format,...)
+{
+	va_list arg_list;
+	va_start(arg_list,Format);
+	vDbgPrintExWithPrefix("[IPB]",DPFLTR_IHVDRIVER_ID,DPFLTR_ERROR_LEVEL,Format,arg_list);
+	va_end(arg_list);
+}
+
 void static ZtxDpcRT(IN PKDPC Dpc,IN PVOID DeferedContext OPTIONAL,IN PVOID SystemArgument1 OPTIONAL,IN PVOID SystemArgument2 OPTIONAL)
 {
 	PLONG volatile n=(PLONG)SystemArgument1;
-	DbgPrint("[IPB] This is broadcast call in processor %d\n",KeGetCurrentProcessorNumber());
+	ZtxDebugPrint("This is broadcast call in processor %d\n",KeGetCurrentProcessorNumber());
 	//Decrement the GlobalOperatingNumber by 1 as we completed operation.
 	InterlockedDecrement(n);
 }
@@ -54,7 +63,7 @@ void ZtxInterProcessorBroadcast(IN PVOID Context)
 				KeInsertQueueDpc(&pDpc[i],(PVOID)GlobalOperatingNumber,NULL);
 			}
 			//When GlobalOperatingNumber=0, all processors has completed operation.
-			while(GlobalOperatingNumber)__nop();
+			while(*GlobalOperatingNumber)__nop();
 			ExFreePool(IpbBuffer);
 		}
 	}
