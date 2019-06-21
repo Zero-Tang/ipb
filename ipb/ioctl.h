@@ -9,3 +9,4 @@
 #define IOCTL_Send			CTL_CODE_GEN(0x801)
 
 void ZtxInterProcessorBroadcast(IN PVOID Context);
+void __cdecl ZtxDebugPrint(IN PCSTR Format,...);

@@ -22,49 +22,39 @@ void __cdecl ZtxDebugPrint(IN PCSTR Format,...)
 {
 	va_list arg_list;
 	va_start(arg_list,Format);
-	vDbgPrintExWithPrefix("[IPB]",DPFLTR_IHVDRIVER_ID,DPFLTR_ERROR_LEVEL,Format,arg_list);
+	vDbgPrintExWithPrefix("[IPB] ",DPFLTR_IHVDRIVER_ID,DPFLTR_ERROR_LEVEL,Format,arg_list);
 	va_end(arg_list);
 }
 
 void static ZtxDpcRT(IN PKDPC Dpc,IN PVOID DeferedContext OPTIONAL,IN PVOID SystemArgument1 OPTIONAL,IN PVOID SystemArgument2 OPTIONAL)
 {
 	PLONG volatile n=(PLONG)SystemArgument1;
-	ZtxDebugPrint("This is broadcast call in processor %d\n",KeGetCurrentProcessorNumber());
+	ZtxDebugPrint("Processor %d loaded CR3 0x%p\n",KeGetCurrentProcessorNumber(),(ULONG_PTR)__readcr3());
 	//Decrement the GlobalOperatingNumber by 1 as we completed operation.
 	InterlockedDecrement(n);
 }
 
 void ZtxInterProcessorBroadcast(IN PVOID Context)
 {
-	if(KeNumberProcessors==1)
+	PVOID IpbBuffer=ExAllocatePool(NonPagedPool,sizeof(KDPC)*KeNumberProcessors+4);
+	if(IpbBuffer)
 	{
-		KIRQL OldIrql=KeRaiseIrqlToDpcLevel();
-		LONG volatile n=1;
-		ZtxDpcRT(NULL,Context,(PVOID)&n,NULL);
-		KeLowerIrql(OldIrql);
-	}
-	else
-	{
-		PVOID IpbBuffer=ExAllocatePool(NonPagedPool,sizeof(KDPC)*KeNumberProcessors+4);
-		if(IpbBuffer)
+		BYTE i=0;
+		PKDPC pDpc=(PKDPC)IpbBuffer;
+		PLONG volatile GlobalOperatingNumber=(PLONG)((ULONG_PTR)IpbBuffer+sizeof(KDPC)*KeNumberProcessors);
+		ZtxDebugPrint("IPB Broadcast has started!\n");
+		RtlZeroMemory(pDpc,sizeof(KDPC)*KeNumberProcessors);
+		//The "Global Operating Number" is a flag for waiting all processors to complete operation.
+		*GlobalOperatingNumber=KeNumberProcessors;
+		for(;i<KeNumberProcessors;i++)
 		{
-			BYTE i=0;
-			PKDPC pDpc=(PKDPC)IpbBuffer;
-			PLONG volatile GlobalOperatingNumber=(PLONG)((ULONG_PTR)IpbBuffer+sizeof(KDPC)*KeNumberProcessors);
-			DbgPrint("[IPB] IPB Broadcast is started!\n");
-			RtlZeroMemory(pDpc,sizeof(KDPC)*KeNumberProcessors);
-			//The "Global Operating Number" is a flag for waiting all processors to complete operation.
-			*GlobalOperatingNumber=KeNumberProcessors;
-			for(;i<KeNumberProcessors;i++)
-			{
-				KeInitializeDpc(&pDpc[i],ZtxDpcRT,Context);
-				KeSetTargetProcessorDpc(&pDpc[i],i);
-				KeSetImportanceDpc(&pDpc[i],HighImportance);
-				KeInsertQueueDpc(&pDpc[i],(PVOID)GlobalOperatingNumber,NULL);
-			}
-			//When GlobalOperatingNumber=0, all processors has completed operation.
-			while(*GlobalOperatingNumber)__nop();
-			ExFreePool(IpbBuffer);
+			KeInitializeDpc(&pDpc[i],ZtxDpcRT,Context);
+			KeSetTargetProcessorDpc(&pDpc[i],i);
+			KeSetImportanceDpc(&pDpc[i],HighImportance);
+			KeInsertQueueDpc(&pDpc[i],(PVOID)GlobalOperatingNumber,NULL);
 		}
+		//When GlobalOperatingNumber=0, all processors has completed operation.
+		while(*GlobalOperatingNumber)__nop();
+		ExFreePool(IpbBuffer);
 	}
 }

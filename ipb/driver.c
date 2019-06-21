@@ -1,5 +1,5 @@
 /*
- EasyVisor Driver
+ IPB Driver
 */
 #include <ntddk.h>
 #include <windef.h>
@@ -81,11 +81,11 @@ NTSTATUS static DispatchIoctl(IN PDEVICE_OBJECT DeviceObject,IN PIRP Irp)
 	switch(IoCtrlCode)
 	{
 		case IOCTL_Send:
-			{
-				ZtxInterProcessorBroadcast(InputBuffer);
-				st=STATUS_SUCCESS;
-				break;
-			}
+		{
+			ZtxInterProcessorBroadcast(InputBuffer);
+			st=STATUS_SUCCESS;
+			break;
+		}
 	}
 	//End Operation
 	if(st==STATUS_SUCCESS)
@@ -99,7 +99,7 @@ NTSTATUS static DispatchIoctl(IN PDEVICE_OBJECT DeviceObject,IN PIRP Irp)
 
 void static DriverReinitialize(IN PDRIVER_OBJECT DriverObject,IN PVOID Context OPTIONAL,IN ULONG Count)
 {
-	;
+	ZtxDebugPrint("System CR3: 0x%p\n",(ULONG_PTR)__readcr3());
 }
 
 NTSTATUS DriverEntry(IN PDRIVER_OBJECT DriverObject,IN PUNICODE_STRING RegistryString)
